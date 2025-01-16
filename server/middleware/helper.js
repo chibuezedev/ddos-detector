@@ -4,48 +4,47 @@ const path = require("path");
 
 class DDoSDetector {
   constructor(modelPath) {
-    this.config = JSON.parse(
-      fs.readFileSync(path.join(modelPath, "config.json"), "utf-8")
-    );
-    this.modelPath = path.join(modelPath, "model.onnx");
-    this.tokenizer = null;
-    this.session = null;
-    this.labelMapping = this.config.label_mapping;
+    try {
+      this.config = JSON.parse(
+        fs.readFileSync(path.join(modelPath, "config.json"), "utf-8")
+      );
+      this.modelPath = path.join(modelPath, "model.onnx");
+      this.session = null;
+      
+      if (!this.config.num_features || !this.config.feature_names) {
+        throw new Error("Invalid config: missing num_features or feature_names");
+      }
+      
+      this.debug = false;
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        throw new Error(`Could not find config file at ${path.join(modelPath, "config.json")}`);
+      }
+      throw error;
+    }
+  }
+
+  setDebug(enabled) {
+    this.debug = enabled;
+    return this;
   }
 
   async initialize() {
-    // Load ONNX model
     this.session = await onnxruntime.InferenceSession.create(this.modelPath);
-
-    // Initialize tokenizer
-    this.tokenizer = {
-      pad_token_id: this.config.pad_token_id,
-      max_length: this.config.max_length,
-    };
+    if (this.debug) {
+      console.log("Model initialized with input names:", this.session.inputNames);
+    }
   }
 
-  preprocessInput(features) {
-    // Convert features to string
-    const featureStr = features.join(" ");
-
-    // Tokenize (simplified version - you'll need to implement proper tokenization)
-    const tokens = featureStr.split(" ").map((x) => parseInt(x) || 0);
-
-    // Pad or truncate to max_length
-    const paddedTokens = tokens.slice(0, this.config.max_length);
-    while (paddedTokens.length < this.config.max_length) {
-      paddedTokens.push(this.tokenizer.pad_token_id);
+  scaleFeatures(features) {
+    const scaledFeatures = new Float32Array(this.config.num_features);
+    for (let i = 0; i < this.config.num_features; i++) {
+      const value = features[i];
+      const mean = this.config.scaler_mean[i];
+      const scale = this.config.scaler_scale[i];
+      scaledFeatures[i] = (value - mean) / scale;
     }
-
-    // Create attention mask
-    const attentionMask = paddedTokens.map((x) =>
-      x !== this.tokenizer.pad_token_id ? 1 : 0
-    );
-
-    return {
-      inputIds: new Float32Array(paddedTokens),
-      attentionMask: new Float32Array(attentionMask),
-    };
+    return scaledFeatures;
   }
 
   async predict(features) {
@@ -53,45 +52,62 @@ class DDoSDetector {
       throw new Error("Model not initialized. Call initialize() first.");
     }
 
-    // Preprocess input
-    const preprocessed = this.preprocessInput(features);
+    try {
+      if (this.debug) {
+        console.log("Starting prediction with features:", features);
+      }
 
-    // Create ONNX tensor
-    const feeds = {
-      input_ids: new onnxruntime.Tensor("float32", preprocessed.inputIds, [
-        1,
-        this.config.max_length,
-      ]),
-      attention_mask: new onnxruntime.Tensor(
-        "float32",
-        preprocessed.attentionMask,
-        [1, this.config.max_length]
-      ),
-    };
+      // Extract and validate features
+      const featureArray = this.config.feature_names.map(name => {
+        const value = features[name];
+        if (typeof value !== 'number') {
+          throw new Error(`Invalid feature value for ${name}: ${value}`);
+        }
+        return value;
+      });
 
-    // Run inference
-    const results = await this.session.run(feeds);
-    const logits = results.logits.data;
+      const processedFeatures = this.config.expects_scaled_input ? 
+        this.scaleFeatures(featureArray) : 
+        new Float32Array(featureArray);
 
-    // Calculate softmax probabilities
-    const exp_logits = logits.map(Math.exp);
-    const sum_exp = exp_logits.reduce((a, b) => a + b, 0);
-    const probabilities = exp_logits.map((exp) => exp / sum_exp);
+      // Create tensor with explicit shape
+      const tensor = new onnxruntime.Tensor(
+        'float32',
+        processedFeatures,
+        [1, this.config.num_features]
+      );
 
-    // Get prediction
-    const predictionIndex = probabilities.indexOf(Math.max(...probabilities));
-    const predictionLabel = this.labelMapping[predictionIndex];
+      //  inference
+      const feeds = { [this.session.inputNames[0]]: tensor };
+      const results = await this.session.run(feeds);
+      const outputData = Array.from(results[this.session.outputNames[0]].data);
 
-    return {
-      prediction: predictionLabel,
-      confidence: probabilities[predictionIndex],
-      probabilities: Object.fromEntries(
-        Object.values(this.labelMapping).map((label, i) => [
-          label,
-          probabilities[i],
-        ])
-      ),
-    };
+      // results
+      const predictionIndex = outputData.indexOf(Math.max(...outputData));
+      const confidence = outputData[predictionIndex];
+      const predictionLabel = this.config.classes[predictionIndex];
+
+      return {
+        prediction: predictionLabel,
+        confidence,
+        raw_output: outputData,
+        features_used: this.config.feature_names,
+        input_features: features
+      };
+    } catch (error) {
+      if (this.debug) {
+        console.error("Prediction failed:", error);
+        console.error("Input features:", features);
+      }
+      throw error;
+    }
+  }
+
+  validateFeatures(features) {
+    const missingFeatures = this.config.feature_names.filter(name => !(name in features));
+    if (missingFeatures.length > 0) {
+      throw new Error(`Missing required features: ${missingFeatures.join(', ')}`);
+    }
   }
 }
 
