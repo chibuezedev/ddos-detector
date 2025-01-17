@@ -1,6 +1,3 @@
-
-```markdown:README.md
-
 ## Setup
 
 1. Clone this repository
