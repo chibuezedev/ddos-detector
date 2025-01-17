@@ -20,6 +20,7 @@ import {
   AlertDescription,
 } from "./components/ui/alertComponent";
 import Input from "./components/ui/inputComponent";
+import Settings from "./components/settings";
 
 const AuthContext = createContext(null);
 
@@ -225,17 +226,17 @@ export const SignupPage = () => {
 
   // Add console.log to debug
   const handleChange = (e) => {
-    console.log('Input changed:', e.target.id, e.target.value); // Debug log
-    setFormData(prev => ({
+    console.log("Input changed:", e.target.id, e.target.value); // Debug log
+    setFormData((prev) => ({
       ...prev,
-      [e.target.id]: e.target.value
+      [e.target.id]: e.target.value,
     }));
     setError("");
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Form submitted with data:', formData); // Debug log
+    console.log("Form submitted with data:", formData); // Debug log
 
     if (formData.password !== formData.confirmPassword) {
       setError("Passwords don't match");
@@ -247,7 +248,10 @@ export const SignupPage = () => {
       await signup(formData.email, formData.password, formData.name);
       navigate("/dashboard");
     } catch (err) {
-      setError(err.response?.data?.message || "Signup failed. Please check your information and try again.");
+      setError(
+        err.response?.data?.message ||
+          "Signup failed. Please check your information and try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -472,6 +476,14 @@ function App() {
             element={
               <Layout>
                 <NetworkDashboard />
+              </Layout>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <Layout>
+                <Settings />
               </Layout>
             }
           />

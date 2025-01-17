@@ -115,15 +115,15 @@ class DDoSProtectionMiddleware {
         // Add detection result to request object
         req.ddosDetection = result;
 
-        if (this.options.logDetections) {
-          console.log("DDoS Detection:", {
-            timestamp: prediction.timestamp,
-            ip: prediction.ip,
-            prediction: prediction.prediction,
-            confidence: prediction.confidence,
-            rawProbabilities: prediction.rawProbabilities,
-          });
-        }
+        // if (this.options.logDetections) {
+        //   console.log("DDoS Detection:", {
+        //     timestamp: prediction.timestamp,
+        //     ip: prediction.ip,
+        //     prediction: prediction.prediction,
+        //     confidence: prediction.confidence,
+        //     rawProbabilities: prediction.rawProbabilities,
+        //   });
+        // }
 
         if (
           this.options.blockOnDetection &&

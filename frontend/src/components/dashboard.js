@@ -2,20 +2,10 @@
 import React, { useState, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alertComponent";
-import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
 import { Shield, AlertTriangle, Activity, Network } from "lucide-react";
 import axios from "axios";
+
+import NetworkChart from "./dashboardChart";
 
 const DDoSDashboard = () => {
   const [realtimeData, setRealtimeData] = useState([]);
@@ -33,11 +23,11 @@ const DDoSDashboard = () => {
     try {
       const response = await axios.get("http://localhost:5000/model/detection");
       const data = response.data.data;
-
-      const avgConfidence = data.reduce((acc, curr) => acc + curr.confidence, 0) / data.length;
+  
+      const avgConfidence =
+        data.reduce((acc, curr) => acc + curr.confidence, 0) / data.length;
       const uniqueIPs = [...new Set(data.map((d) => d.ip))];
-      console.log(uniqueIPs)
-
+  
       setStats({
         totalRequests: data.length,
         benignCount: data.filter((d) => d.prediction === "Benign").length,
@@ -46,12 +36,11 @@ const DDoSDashboard = () => {
         averageConfidence: avgConfidence,
         uniqueIPs: uniqueIPs,
       });
-
+  
       checkForAlert(data);
-
+  
       setRealtimeData((prev) => {
-        const newData = [...prev, data].slice(-20); // Keep last 20 records
-        console.log(newData)
+        const newData = [...prev, ...data].slice(-20); // Keep last 20 records
         return newData;
       });
     } catch (error) {
@@ -61,17 +50,17 @@ const DDoSDashboard = () => {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 20000);
+    const interval = setInterval(fetchData, 3600000);
     return () => clearInterval(interval);
   }, [fetchData]);
 
   const checkForAlert = (detections) => {
-    detections.forEach(detection => {
+    detections.forEach((detection) => {
       if (detection.prediction !== "Benign" && detection.confidence > 0.6) {
         const newAlert = {
           id: detection._id,
           type: `${detection.prediction} Detected`,
-          severity: detection.prediction === "DDoS" ? "high" : "medium", 
+          severity: detection.prediction === "DDoS" ? "high" : "medium",
           timestamp: detection.timestamp,
           details: `${detection.prediction} detected from IP: ${
             detection.ip
@@ -186,81 +175,7 @@ const DDoSDashboard = () => {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Packet Analysis</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={realtimeData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="timestamp"
-                  tickFormatter={(time) => new Date(time).toLocaleTimeString()}
-                />
-                <YAxis />
-                <Tooltip
-                  labelFormatter={(label) => new Date(label).toLocaleString()}
-                />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="features.Packets"
-                  stroke="#3b82f6"
-                  name="Total Packets"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="features.RxPackets"
-                  stroke="#ef4444"
-                  name="Rx Packets"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="features.TxPackets"
-                  stroke="#22c55e"
-                  name="Tx Packets"
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Detection Probabilities</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={realtimeData.slice(-5)}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="timestamp"
-                  tickFormatter={(time) => new Date(time).toLocaleTimeString()}
-                />
-                <YAxis domain={[0, 1]} />
-                <Tooltip
-                  labelFormatter={(label) => new Date(label).toLocaleString()}
-                  formatter={(value) => `${(value * 100).toFixed(1)}%`}
-                />
-                <Legend />
-                <Bar
-                  dataKey="rawProbabilities[0]"
-                  name="Benign"
-                  fill="#22c55e"
-                />
-                <Bar dataKey="rawProbabilities[1]" name="DDoS" fill="#f97316" />
-                <Bar
-                  dataKey="rawProbabilities[2]"
-                  name="DDoS-Attack"
-                  fill="#ef4444"
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
+      <NetworkChart data={realtimeData} />
     </div>
   );
 };

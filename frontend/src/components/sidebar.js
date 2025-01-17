@@ -15,7 +15,7 @@ const Sidebar = () => {
             <span>Dashboard</span>
           </Link>
           <Link
-            to="/security"
+            to="/settings"
             className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100"
           >
             <Shield className="h-5 w-5 text-gray-600" />

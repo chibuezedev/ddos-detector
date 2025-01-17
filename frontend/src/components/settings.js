@@ -1,17 +1,9 @@
 import React, { useState } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
-import { Label } from "./ui/label";
-import { Switch } from "./ui/switch";
-import Button from "./ui/buttonComponent";
-import { Input } from ".ui/inputComponent";
-import { 
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "./ui/select";
 import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
   AlertDialog,
   AlertDialogAction,
   AlertDialogContent,
@@ -19,23 +11,33 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "./ui/alertComponent";
+  Label,
+  Switch,
+  Button,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/settings";
+import Input from "./ui/inputComponent";
+
 import { Shield, Mail, Bell, Brain, Save } from "lucide-react";
 
 const SecuritySettings = () => {
   const [settings, setSettings] = useState({
     emailNotifications: true,
-    selectedModel: "enhanced",
+    selectedModel: "Basic Detection",
     confidenceThreshold: 0.6,
     emailAddress: "admin@example.com",
     attackTypes: {
       ddos: true,
       ddosAttack: true,
       portScan: false,
-      bruteforce: false
+      bruteforce: false,
     },
-    alertFrequency: "realtime",
-    aggregationWindow: "5min"
+    alertFrequency: "Real-Time",
+    aggregationWindow: "5min",
   });
 
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -44,11 +46,11 @@ const SecuritySettings = () => {
   const handleSaveSettings = async () => {
     setIsSaving(true);
     try {
-      // API call to save settings would go here
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
+      // API call
+      await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate API call
       setShowSaveDialog(true);
     } catch (error) {
-      console.error('Error saving settings:', error);
+      console.error("Error saving settings:", error);
     } finally {
       setIsSaving(false);
     }
@@ -82,14 +84,24 @@ const SecuritySettings = () => {
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a model" />
+                  <SelectValue
+                    value={settings.selectedModel}
+                    placeholder="Select a model"
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="basic">Basic Detection</SelectItem>
-                  <SelectItem value="enhanced">Enhanced Detection</SelectItem>
-                  <SelectItem value="advanced">Advanced ML Model</SelectItem>
+                  <SelectItem value="Basic Detection">
+                    Basic Detection
+                  </SelectItem>
+                  <SelectItem value="Enhanced Detection">
+                    Enhanced Detection
+                  </SelectItem>
+                  <SelectItem value="Advanced ML Mode">
+                    Advanced ML Model
+                  </SelectItem>
                 </SelectContent>
               </Select>
+
               <p className="text-sm text-gray-500">
                 Choose the detection model that best suits your needs
               </p>
@@ -107,14 +119,12 @@ const SecuritySettings = () => {
                   onChange={(e) =>
                     setSettings({
                       ...settings,
-                      confidenceThreshold: parseFloat(e.target.value)
+                      confidenceThreshold: parseFloat(e.target.value),
                     })
                   }
                   className="w-24"
                 />
-                <span className="text-sm text-gray-500">
-                  (0.0 - 1.0)
-                </span>
+                <span className="text-sm text-gray-500">(0.0 - 1.0)</span>
               </div>
             </div>
           </CardContent>
@@ -143,14 +153,17 @@ const SecuritySettings = () => {
                     onCheckedChange={(checked) =>
                       setSettings({
                         ...settings,
-                        attackTypes: { ...settings.attackTypes, ddos: checked }
+                        attackTypes: { ...settings.attackTypes, ddos: checked },
                       })
                     }
                   />
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="ddosAttack" className="flex items-center gap-2">
+                  <Label
+                    htmlFor="ddosAttack"
+                    className="flex items-center gap-2"
+                  >
                     <Shield className="h-4 w-4" />
                     DDoS Attacks
                   </Label>
@@ -160,7 +173,10 @@ const SecuritySettings = () => {
                     onCheckedChange={(checked) =>
                       setSettings({
                         ...settings,
-                        attackTypes: { ...settings.attackTypes, ddosAttack: checked }
+                        attackTypes: {
+                          ...settings.attackTypes,
+                          ddosAttack: checked,
+                        },
                       })
                     }
                   />
@@ -177,14 +193,20 @@ const SecuritySettings = () => {
                     onCheckedChange={(checked) =>
                       setSettings({
                         ...settings,
-                        attackTypes: { ...settings.attackTypes, portScan: checked }
+                        attackTypes: {
+                          ...settings.attackTypes,
+                          portScan: checked,
+                        },
                       })
                     }
                   />
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="bruteforce" className="flex items-center gap-2">
+                  <Label
+                    htmlFor="bruteforce"
+                    className="flex items-center gap-2"
+                  >
                     <Shield className="h-4 w-4" />
                     Brute Force Attempts
                   </Label>
@@ -194,7 +216,10 @@ const SecuritySettings = () => {
                     onCheckedChange={(checked) =>
                       setSettings({
                         ...settings,
-                        attackTypes: { ...settings.attackTypes, bruteforce: checked }
+                        attackTypes: {
+                          ...settings.attackTypes,
+                          bruteforce: checked,
+                        },
                       })
                     }
                   />
@@ -211,12 +236,15 @@ const SecuritySettings = () => {
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select frequency" />
+                  <SelectValue
+                    value={settings.alertFrequency}
+                    placeholder="Select frequency"
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="realtime">Real-time</SelectItem>
-                  <SelectItem value="aggregate">Aggregated</SelectItem>
-                  <SelectItem value="digest">Daily Digest</SelectItem>
+                  <SelectItem value="Real-time">Real-time</SelectItem>
+                  <SelectItem value="Aggregated">Aggregated</SelectItem>
+                  <SelectItem value="Daily Digest">Daily Digest</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -255,7 +283,9 @@ const SecuritySettings = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
-              <Label htmlFor="emailNotifications">Enable Email Notifications</Label>
+              <Label htmlFor="emailNotifications">
+                Enable Email Notifications
+              </Label>
               <Switch
                 id="emailNotifications"
                 checked={settings.emailNotifications}
@@ -300,12 +330,14 @@ const SecuritySettings = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Settings Saved Successfully</AlertDialogTitle>
             <AlertDialogDescription>
-              Your security settings have been updated. The new configuration will take
-              effect immediately.
+              Your security settings have been updated. The new configuration
+              will take effect immediately.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogAction>Done</AlertDialogAction>
+            <AlertDialogAction onClick={() => setShowSaveDialog(false)}>
+              Done
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
