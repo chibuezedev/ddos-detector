@@ -1,6 +1,8 @@
 const express = require('express');
 const axios = require('axios');
 
+const Prediction = require("../model/prediction")
+
 class DDoSProtectionMiddleware {
   constructor(options = {}) {
     this.options = {
@@ -88,28 +90,54 @@ class DDoSProtectionMiddleware {
         const response = await axios.post(this.options.pythonServerUrl, features);
         const result = response.data;
 
+        // Log prediction to MongoDB
+        const prediction = new Prediction({
+          ip: req.ip,
+          features: {
+            Packets: features.Packets,
+            Bytes: features.Bytes,
+            TxPackets: features['Tx Packets'],
+            TxBytes: features['Tx Bytes'],
+            RxPackets: features['Rx Packets'],
+            RxBytes: features['Rx Bytes'],
+            tcp_srcport: features['tcp.srcport'],
+            tcp_dstport: features['tcp.dstport'],
+            ip_proto: features['ip.proto'],
+            frame_len: features['frame.len'],
+          },
+          prediction: result.prediction,
+          confidence: result.confidence,
+          rawProbabilities: result.raw_probabilities,
+        });
+
+        await prediction.save();
+
         // Add detection result to request object
         req.ddosDetection = result;
 
         if (this.options.logDetections) {
           console.log("DDoS Detection:", {
-            timestamp: new Date().toISOString(),
-            ip: req.ip,
-            prediction: result.prediction,
-            confidence: result.confidence,
-            features
+            timestamp: prediction.timestamp,
+            ip: prediction.ip,
+            prediction: prediction.prediction,
+            confidence: prediction.confidence,
+            rawProbabilities: prediction.rawProbabilities,
           });
         }
 
         if (
           this.options.blockOnDetection &&
-          result.prediction === "DDoS" &&
+          result.prediction === "DDoS-ACK"  || "DDoS-PSH-ACK" &&
           result.confidence > this.options.threshold
         ) {
+
+          // TODO: SEND EMAIL ALERT
+
+          
           return res.status(403).json({
             error: "Access denied",
             reason: "Suspicious traffic pattern detected",
-            confidence: result.confidence
+            confidence: result.confidence,
           });
         }
 

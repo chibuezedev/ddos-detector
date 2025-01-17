@@ -12,7 +12,6 @@ import { Shield, Menu, X, Mail, Lock, User, Loader2 } from "lucide-react";
 import NetworkDashboard from "./components/dashboard";
 import Sidebar from "./components/sidebar";
 import Button from "./components/ui/buttonComponent";
-import Analyze from "./components/analyse";
 import Hero from "./components/home";
 import { Card, CardContent, CardFooter } from "./components/ui/card";
 import {
@@ -59,7 +58,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      const response = await axios.post("http://localhost:3001/login", {
+      const response = await axios.post("http://localhost:5000/auth/login", {
         email,
         password,
       });
@@ -91,7 +90,7 @@ export const AuthProvider = ({ children }) => {
 
   const signup = async (email, password, name) => {
     try {
-      const response = await axios.post("http://localhost:3001/signup", {
+      const response = await axios.post("http://localhost:5000/auth/signup", {
         email,
         password,
         name,
@@ -151,7 +150,7 @@ const Navbar = () => {
             </button>
             <Link to="/" className="flex items-center space-x-2">
               <Shield className="h-8 w-8 text-blue-500" />
-              <span className="font-bold text-xl">NetPack</span>
+              <span className="font-bold text-xl">Detective</span>
             </Link>
           </div>
           {user && (
@@ -160,7 +159,7 @@ const Navbar = () => {
                 {user.name}
               </span>
               <Button
-                variant="ghost"
+                variant="primary"
                 onClick={handleLogout}
                 className="flex items-center space-x-2"
               >
@@ -224,23 +223,31 @@ export const SignupPage = () => {
     confirmPassword: "",
   });
 
+  // Add console.log to debug
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.id]: e.target.value });
-    setError(""); // Clear error when user types
+    console.log('Input changed:', e.target.id, e.target.value); // Debug log
+    setFormData(prev => ({
+      ...prev,
+      [e.target.id]: e.target.value
+    }));
+    setError("");
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    console.log('Form submitted with data:', formData); // Debug log
+
     if (formData.password !== formData.confirmPassword) {
       setError("Passwords don't match");
       return;
     }
+
     setLoading(true);
     try {
       await signup(formData.email, formData.password, formData.name);
       navigate("/dashboard");
     } catch (err) {
-      setError("Signup failed. Please check your information and try again.");
+      setError(err.response?.data?.message || "Signup failed. Please check your information and try again.");
     } finally {
       setLoading(false);
     }
@@ -312,9 +319,9 @@ export const SignupPage = () => {
             disabled={loading}
           >
             {loading ? (
-              <Loader2 className="w-14 h-4 mr-2 animate-spin" />
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
             ) : (
-              <>Create Account</>
+              "Create Account"
             )}
           </Button>
           <div className="text-center">
@@ -465,15 +472,6 @@ function App() {
             element={
               <Layout>
                 <NetworkDashboard />
-              </Layout>
-            }
-          />
-          <Route
-            path="/analyze"
-            element={
-              <Layout>
-                {" "}
-                <Analyze />
               </Layout>
             }
           />

@@ -29,7 +29,7 @@ const Navbar = () => {
             </button>
             <Link to="/" className="flex items-center space-x-2">
               <Shield className="h-8 w-8 text-blue-500" />
-              <span className="font-bold text-xl">NetGuard</span>
+              <span className="font-bold text-xl">Detective</span>
             </Link>
           </div>
           {user && (

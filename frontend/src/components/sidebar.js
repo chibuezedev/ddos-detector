@@ -1,5 +1,5 @@
 import React from "react";
-import { Shield, Activity, Target  } from "lucide-react";
+import { Shield, Activity,   } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const Sidebar = () => {
@@ -15,14 +15,7 @@ const Sidebar = () => {
             <span>Dashboard</span>
           </Link>
           <Link
-            to="/analyze"
-            className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100"
-          >
-            <Target className="h-5 w-5 text-gray-600" />
-            <span>Analyse</span>
-          </Link>
-          <Link
-            to="#"
+            to="/security"
             className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100"
           >
             <Shield className="h-5 w-5 text-gray-600" />

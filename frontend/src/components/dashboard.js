@@ -1,72 +1,133 @@
-import React, { useState } from "react";
+/* eslint-disable react-hooks/exhaustive-deps */
+import React, { useState, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alertComponent";
 import {
-  BarChart,
   LineChart,
   Line,
+  BarChart,
   Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   Legend,
+  ResponsiveContainer,
 } from "recharts";
 import { Shield, AlertTriangle, Activity, Network } from "lucide-react";
+import axios from "axios";
 
-const NetworkDashboard = () => {
+const DDoSDashboard = () => {
+  const [realtimeData, setRealtimeData] = useState([]);
+  const [alerts, setAlerts] = useState([]);
+  const [stats, setStats] = useState({
+    totalRequests: 0,
+    benignCount: 0,
+    ddosCount: 0,
+    ddosAttackCount: 0,
+    averageConfidence: 0,
+    uniqueIPs: new Set(),
+  });
 
-  const [alerts] = useState([
-    {
-      id: 1,
-      type: "Potential DDoS",
-      severity: "high",
-      timestamp: "2024-10-24 10:30:00",
-      details: "Unusual spike in traffic from IP range 192.168.1.x",
-    },
-    {
-      id: 2,
-      type: "Port Scan",
-      severity: "medium",
-      timestamp: "2024-10-24 10:28:30",
-      details: "Sequential port scanning detected from 10.0.0.5",
-    },
-  ]);
+  const fetchData = async () => {
+    try {
+      const response = await axios.get("http://localhost:5000/model/detection");
+      const data = response.data.data;
 
-  const trafficData = [
-    { time: "10:00", normal: 150, suspicious: 5 },
-    { time: "10:10", normal: 200, suspicious: 8 },
-    { time: "10:20", normal: 180, suspicious: 12 },
-    { time: "10:30", normal: 220, suspicious: 25 },
-  ];
+      const avgConfidence = data.reduce((acc, curr) => acc + curr.confidence, 0) / data.length;
+      const uniqueIPs = [...new Set(data.map((d) => d.ip))];
+      console.log(uniqueIPs)
 
-  const protocolData = [
-    { name: "TCP", normal: 450, malicious: 20 },
-    { name: "UDP", normal: 300, malicious: 15 },
-    { name: "ICMP", normal: 100, malicious: 8 },
-    { name: "HTTP", normal: 200, malicious: 12 },
-  ];
+      setStats({
+        totalRequests: data.length,
+        benignCount: data.filter((d) => d.prediction === "Benign").length,
+        ddosCount: data.filter((d) => d.prediction === "DDoS").length,
+        ddosAttackCount: data.filter((d) => d.prediction === "DDoS-ACK").length,
+        averageConfidence: avgConfidence,
+        uniqueIPs: uniqueIPs,
+      });
+
+      checkForAlert(data);
+
+      setRealtimeData((prev) => {
+        const newData = [...prev, data].slice(-20); // Keep last 20 records
+        console.log(newData)
+        return newData;
+      });
+    } catch (error) {
+      console.error("Error fetching detection data:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 20000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
+
+  const checkForAlert = (detections) => {
+    detections.forEach(detection => {
+      if (detection.prediction !== "Benign" && detection.confidence > 0.6) {
+        const newAlert = {
+          id: detection._id,
+          type: `${detection.prediction} Detected`,
+          severity: detection.prediction === "DDoS" ? "high" : "medium", 
+          timestamp: detection.timestamp,
+          details: `${detection.prediction} detected from IP: ${
+            detection.ip
+          } (Confidence: ${(detection.confidence * 100).toFixed(1)}%)`,
+          packets: detection.features.Packets,
+        };
+        setAlerts((prev) => [newAlert, ...prev].slice(0, 5));
+      }
+    });
+  };
+
+  const getThreatLevel = () => {
+    const attackRate =
+      (stats.ddosCount + stats.ddosAttackCount) / stats.totalRequests;
+    if (attackRate > 0.3) return "High";
+    if (attackRate > 0.1) return "Medium";
+    return "Low";
+  };
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-2">
-          Network Intrusion Detection System
-        </h1>
+        <h1 className="text-3xl font-bold mb-2">DDoS Detection System</h1>
         <p className="text-gray-600">
-          Real-time network traffic analysis and threat detection
+          Real-time traffic analysis and attack detection
         </p>
       </div>
 
-      {/* Stats Overview */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center space-x-2">
-              <Shield className="h-8 w-8 text-green-500" />
+              <Shield
+                className={`h-8 w-8 ${
+                  getThreatLevel() === "High"
+                    ? "text-red-500"
+                    : getThreatLevel() === "Medium"
+                    ? "text-yellow-500"
+                    : "text-green-500"
+                }`}
+              />
               <div>
                 <p className="text-sm text-gray-500">Threat Level</p>
-                <p className="text-2xl font-bold">Medium</p>
+                <p className="text-2xl font-bold">{getThreatLevel()}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center space-x-2">
+              <Network className="h-8 w-8 text-blue-500" />
+              <div>
+                <p className="text-sm text-gray-500">Unique IPs</p>
+                <p className="text-2xl font-bold">{stats.uniqueIPs[0]}</p>
               </div>
             </div>
           </CardContent>
@@ -77,8 +138,10 @@ const NetworkDashboard = () => {
             <div className="flex items-center space-x-2">
               <AlertTriangle className="h-8 w-8 text-yellow-500" />
               <div>
-                <p className="text-sm text-gray-500">Active Alerts</p>
-                <p className="text-2xl font-bold">{alerts.length}</p>
+                <p className="text-sm text-gray-500">Detection Confidence</p>
+                <p className="text-2xl font-bold">
+                  {(stats.averageConfidence * 100).toFixed(1)}%
+                </p>
               </div>
             </div>
           </CardContent>
@@ -87,29 +150,16 @@ const NetworkDashboard = () => {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center space-x-2">
-              <Activity className="h-8 w-8 text-blue-500" />
+              <Activity className="h-8 w-8 text-red-500" />
               <div>
-                <p className="text-sm text-gray-500">Traffic Rate</p>
-                <p className="text-2xl font-bold">1.2K/s</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center space-x-2">
-              <Network className="h-8 w-8 text-purple-500" />
-              <div>
-                <p className="text-sm text-gray-500">Active Connections</p>
-                <p className="text-2xl font-bold">842</p>
+                <p className="text-sm text-gray-500">DDoS Detections</p>
+                <p className="text-2xl font-bold">{stats.ddosCount}</p>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Alert Section */}
       <Card className="mb-6">
         <CardHeader>
           <CardTitle>Recent Alerts</CardTitle>
@@ -126,7 +176,8 @@ const NetworkDashboard = () => {
                 <AlertDescription>
                   {alert.details}
                   <div className="text-sm text-gray-500 mt-1">
-                    {alert.timestamp}
+                    {new Date(alert.timestamp).toLocaleString()} | Packets:{" "}
+                    {alert.packets}
                   </div>
                 </AlertDescription>
               </Alert>
@@ -135,53 +186,78 @@ const NetworkDashboard = () => {
         </CardContent>
       </Card>
 
-      {/* Charts */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>Network Traffic Over Time</CardTitle>
+            <CardTitle>Packet Analysis</CardTitle>
           </CardHeader>
           <CardContent>
-            <LineChart width={500} height={300} data={trafficData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="time" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Line
-                type="monotone"
-                dataKey="normal"
-                stroke="#3b82f6"
-                name="Normal Traffic"
-              />
-              <Line
-                type="monotone"
-                dataKey="suspicious"
-                stroke="#ef4444"
-                name="Suspicious Traffic"
-              />
-            </LineChart>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={realtimeData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="timestamp"
+                  tickFormatter={(time) => new Date(time).toLocaleTimeString()}
+                />
+                <YAxis />
+                <Tooltip
+                  labelFormatter={(label) => new Date(label).toLocaleString()}
+                />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="features.Packets"
+                  stroke="#3b82f6"
+                  name="Total Packets"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="features.RxPackets"
+                  stroke="#ef4444"
+                  name="Rx Packets"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="features.TxPackets"
+                  stroke="#22c55e"
+                  name="Tx Packets"
+                />
+              </LineChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Protocol Analysis</CardTitle>
+            <CardTitle>Detection Probabilities</CardTitle>
           </CardHeader>
           <CardContent>
-            <BarChart width={500} height={300} data={protocolData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="normal" fill="#3b82f6" name="Normal Traffic" />
-              <Bar
-                dataKey="malicious"
-                fill="#ef4444"
-                name="Malicious Traffic"
-              />
-            </BarChart>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={realtimeData.slice(-5)}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="timestamp"
+                  tickFormatter={(time) => new Date(time).toLocaleTimeString()}
+                />
+                <YAxis domain={[0, 1]} />
+                <Tooltip
+                  labelFormatter={(label) => new Date(label).toLocaleString()}
+                  formatter={(value) => `${(value * 100).toFixed(1)}%`}
+                />
+                <Legend />
+                <Bar
+                  dataKey="rawProbabilities[0]"
+                  name="Benign"
+                  fill="#22c55e"
+                />
+                <Bar dataKey="rawProbabilities[1]" name="DDoS" fill="#f97316" />
+                <Bar
+                  dataKey="rawProbabilities[2]"
+                  name="DDoS-Attack"
+                  fill="#ef4444"
+                />
+              </BarChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>
@@ -189,4 +265,4 @@ const NetworkDashboard = () => {
   );
 };
 
-export default NetworkDashboard;
+export default DDoSDashboard;
