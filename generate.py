@@ -9,14 +9,14 @@ fake = Faker()
 random.seed(42)
 np.random.seed(42)
 
-# Enhanced Configuration
-DATASET_SIZE = 1000000  # Increased to 1M samples
+# Configuration
+DATASET_SIZE = 1000000  # 1M samples
 BALANCE_RATIO = 0.5
 NORMAL_IP_POOL_SIZE = 20000
 ATTACK_IP_POOL_SIZE = 1000
 TIMEWINDOW_MINUTES = 1
 
-# Advanced feature ranges
+# feature ranges
 ENHANCED_RANGES = {
     'normal': {
         'req_per_min': (1, 30),
@@ -224,7 +224,6 @@ with open('enhanced_ddos_dataset.csv', 'w', newline='') as csvfile:
             'label': int(is_attack)
         }
         
-        # Add behavioral fingerprints
         if source_ip not in ip_behavior:
             ip_behavior[source_ip] = {
                 'fingerprint': hashlib.md5(str(random.getrandbits(256)).encode()).hexdigest()[:16],
@@ -232,7 +231,6 @@ with open('enhanced_ddos_dataset.csv', 'w', newline='') as csvfile:
             }
         ip_behavior[source_ip]['request_count'] += 1
         
-        # Inject realistic noise
         record = inject_noise(record, is_attack)
         
         writer.writerow(record)
