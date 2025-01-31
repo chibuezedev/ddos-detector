@@ -1,4 +1,4 @@
-const Prediction = require("../model/prediction");
+const Prediction = require("../models/prediction");
 
 exports.getDetections = async (req, res) => {
   try {

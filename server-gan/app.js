@@ -10,25 +10,25 @@ const detectionRoutes = require("./routes/prediction")
 const app = express();
 dotenv.config();
 
-// initialise DDoS protection middleware
 const ddosProtection = new DDoSProtectionMiddleware({
-  blockOnDetection: true,
-  logDetections: true,
-  threshold: 0.8,
-  pythonServerUrl: "http://127.0.0.1:8000/predict",
+  blockThreshold: 0.75,
+  pythonEndpoint: process.env.ML_ENDPOINT || 'http://localhost:8000/predict'
 });
+
 
 app.use(cors())
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// DDoS protection middleware BEFORE other routes
-// Note: This ensures every request is checked
+// DDoS protection middleware
 app.use(ddosProtection.middleware());
 
+
 app.get("/", (req, res) => {
-  console.log("Detection result:", req.ddosDetection);
-  res.json("Hello World!");
+  res.json({ 
+    message: 'Access granted',
+    ddosStatus: req.ddosInfo 
+  });
 });
 
 

@@ -1,149 +1,147 @@
-const express = require('express');
-const axios = require('axios');
-
-const Prediction = require("../model/prediction")
+const axios = require("axios");
+const uaParser = require("ua-parser-js");
+const geoip = require("geoip-lite");
+const Prediction = require("../models/prediction");
 
 class DDoSProtectionMiddleware {
+
   constructor(options = {}) {
     this.options = {
-      blockOnDetection: true,
-      logDetections: true,
-      threshold: 0.8,
-      timeWindow: 60000, // 1 minute window
-      pythonServerUrl: 'http://127.0.0.1:8000/predict',
-      ...options
+      blockThreshold: 0.7,
+      requestWindow: 60000,
+      pythonEndpoint: "http://localhost:8000/predict",
+      uaHistorySize: 10,
+      ...options,
     };
 
-    this.trafficStats = new Map();
+    this.requestHistory = new Map();
+    this.uaHistory = new Map();
+    this.requestTimings = new Map();
   }
 
-  updateTrafficStats(ip, bytes) {
-    const now = Date.now();
-    const stats = this.trafficStats.get(ip) || {
-      packets: 0,
-      bytes: 0,
-      txPackets: 0,
-      txBytes: 0,
-      rxPackets: 0,
-      rxBytes: 0,
-      lastUpdate: now
-    };
+  _ipToInt(ip) {
+    return (
+      ip
+        .split(".")
+        .reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0
+    );
+  }
 
-    if (now - stats.lastUpdate > this.options.timeWindow) {
-      stats.packets = 0;
-      stats.bytes = 0;
-      stats.txPackets = 0;
-      stats.txBytes = 0;
-      stats.rxPackets = 0;
-      stats.rxBytes = 0;
+  _calculateUAVariance(ip, currentUA) {
+    const history = this.uaHistory.get(ip) || [];
+
+    history.push(currentUA);
+
+    if (history.length > this.options.uaHistorySize) {
+      history.shift();
     }
 
-    stats.packets++;
-    stats.bytes += bytes;
-    stats.rxPackets++;
-    stats.rxBytes += bytes;
-    stats.lastUpdate = now;
+    this.uaHistory.set(ip, history);
 
-    this.trafficStats.set(ip, stats);
-    return stats;
+    if (history.length < 2) return 0;
+
+    const lengths = history.map((ua) => ua.length);
+    const mean = lengths.reduce((a, b) => a + b) / lengths.length;
+    const variance =
+      lengths.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / lengths.length;
+
+    return Math.min(10, variance / 100);
+  }
+
+  _getRequestRate(ip) {
+    const now = Date.now();
+    const history = this.requestHistory.get(ip) || [];
+
+    // Filter requests within time window
+    const recentRequests = history.filter(
+      (t) => now - t < this.options.requestWindow
+    );
+    recentRequests.push(now);
+    this.requestHistory.set(ip, recentRequests);
+
+    return recentRequests.length;
+  }
+  _startRequestTimer(ip) {
+    this.requestTimings.set(ip, process.hrtime());
+  }
+
+  _getRequestDuration(ip) {
+    const startTime = this.requestTimings.get(ip);
+    if (!startTime) return 0.05;
+
+    const [seconds, nanoseconds] = process.hrtime(startTime);
+    return seconds + nanoseconds / 1e9;
   }
 
   extractFeatures(req) {
-    const srcPort = req.socket.remotePort || 0;
-    const dstPort = req.socket.localPort || 80;
-    const protocol = req.protocol === "https" ? 6 : 1;
-    const frameLen = req.headers['content-length'] ? 
-      parseInt(req.headers['content-length']) : 0;
-
-    const stats = this.updateTrafficStats(req.ip, frameLen);
+    const ip = req.ip;
+    const now = new Date();
+    const ua = uaParser(req.headers["user-agent"] || "");
+    const geo = geoip.lookup(ip) || {};
 
     return {
-      'Packets': stats.packets,
-      'Bytes': stats.bytes,
-      'Tx Packets': stats.txPackets,
-      'Tx Bytes': stats.txBytes,
-      'Rx Packets': stats.rxPackets,
-      'Rx Bytes': stats.rxBytes,
-      'tcp.srcport': srcPort,
-      'tcp.dstport': dstPort,
-      'ip.proto': protocol,
-      'frame.len': frameLen
+      source_ip: this._ipToInt(ip),
+      day_of_week: now.getDay(),
+      hour_of_day: now.getHours(),
+      http_method: req.method,
+      url_path: req.path,
+      user_agent: req.headers["user-agent"] || "",
+      content_length: parseInt(req.headers["content-length"]) || 0,
+      http_version: "HTTP/1.0",
+      num_headers: Object.keys(req.headers).length,
+      headers_length: Buffer.byteLength(JSON.stringify(req.headers)),
+      is_proxy: req.headers["x-forwarded-for"] ? 1 : 0,
+      cookie_present: req.headers.cookie ? 1 : 0,
+      request_duration: this._getRequestDuration(ip),
+      req_rate_1min: this._getRequestRate(ip),
+      ua_variance: this._calculateUAVariance(
+        ip,
+        req.headers["user-agent"] || ""
+      ),
+      tls_version: req.secure ? "TLS 1.3" : "None",
+      geo_location: geo.country || "Unknown",
+      device_type: ua.device.type || "desktop",
+      entropy_rate: 0.8,
+      packet_size_var: 1.2,
+      timestamp: new Date().toISOString(),
     };
-  }
-
-  cleanupOldStats() {
-    const now = Date.now();
-    for (const [ip, stats] of this.trafficStats.entries()) {
-      if (now - stats.lastUpdate > this.options.timeWindow) {
-        this.trafficStats.delete(ip);
-      }
-    }
   }
 
   middleware() {
     return async (req, res, next) => {
       try {
-        this.cleanupOldStats();
+        const ip = req.ip;
+        this._startRequestTimer(ip); // Start request timer
         const features = this.extractFeatures(req);
 
-        // Send features to Python server for prediction
-        const response = await axios.post(this.options.pythonServerUrl, features);
-        const result = response.data;
+        const response = await axios.post(
+          this.options.pythonEndpoint,
+          features
+        );
+        const { is_ddos, confidence, risk_level } = response.data;
 
-        // Log prediction to MongoDB
-        const prediction = new Prediction({
+        await Prediction.create({
           ip: req.ip,
-          features: {
-            Packets: features.Packets,
-            Bytes: features.Bytes,
-            TxPackets: features['Tx Packets'],
-            TxBytes: features['Tx Bytes'],
-            RxPackets: features['Rx Packets'],
-            RxBytes: features['Rx Bytes'],
-            tcp_srcport: features['tcp.srcport'],
-            tcp_dstport: features['tcp.dstport'],
-            ip_proto: features['ip.proto'],
-            frame_len: features['frame.len'],
-          },
-          prediction: result.prediction,
-          confidence: result.confidence,
-          rawProbabilities: result.raw_probabilities,
+          features,
+          is_ddos,
+          confidence,
+          risk_level,
+          timestamp: new Date(),
         });
 
-        await prediction.save();
-
-        // Add detection result to request object
-        req.ddosDetection = result;
-
-        // if (this.options.logDetections) {
-        //   console.log("DDoS Detection:", {
-        //     timestamp: prediction.timestamp,
-        //     ip: prediction.ip,
-        //     prediction: prediction.prediction,
-        //     confidence: prediction.confidence,
-        //     rawProbabilities: prediction.rawProbabilities,
-        //   });
-        // }
-
-        if (
-          this.options.blockOnDetection &&
-          result.prediction === "DDoS-ACK"  || "DDoS-PSH-ACK" &&
-          result.confidence > this.options.threshold
-        ) {
-
-          // TODO: SEND EMAIL ALERT
-
-          
-          return res.status(403).json({
-            error: "Access denied",
-            reason: "Suspicious traffic pattern detected",
-            confidence: result.confidence,
+        if (is_ddos && confidence >= this.options.blockThreshold) {
+          return res.status(429).json({
+            error: "Request blocked",
+            message: "Potential DDoS activity detected",
+            confidence,
+            risk_level,
           });
         }
-
+        console.log("Received", is_ddos, confidence, risk_level);
+        req.ddosInfo = { is_ddos, confidence, risk_level };
         next();
       } catch (error) {
-        console.error("DDoS detection error:", error);
+        console.error("DDoS check failed:", error);
         next();
       }
     };
