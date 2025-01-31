@@ -19,7 +19,7 @@ from imblearn.ensemble import BalancedRandomForestClassifier
 
 warnings.filterwarnings('ignore')
 
-class EnhancedDDoSDetector:
+class DDoSDetector:
     def __init__(self, model_type='xgb'):
         self.feature_columns = [
             'source_ip', 'http_method', 'url_path', 'user_agent',
@@ -351,7 +351,7 @@ class EnhancedDDoSDetector:
         self.optimal_threshold = components.get('threshold', 0.5)
 
 if __name__ == "__main__":
-    detector = EnhancedDDoSDetector(model_type='brf')  # xgb or brf
+    detector = DDoSDetector(model_type='brf')  # xgb or brf
     detector.train('enhanced_ddos_dataset.csv')
     detector.save_model()
     # detector.load_model()
