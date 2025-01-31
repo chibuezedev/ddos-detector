@@ -153,16 +153,17 @@ with open('enhanced_ddos_dataset.csv', 'w', newline='') as csvfile:
                 *ENHANCED_RANGES['attack'][attack_type]['req_per_min']
             )
             ua_variance = np.random.randint(
-                ENHANCED_RANGES['attack']['ua_per_ip']
-            )
+                *ENHANCED_RANGES['attack']['ua_per_ip'],
+                size=1
+            )[0]
         else:
             source_ip = random.choice(normal_ips)
-            req_rate = np.random.randint(
-                *ENHANCED_RANGES['normal']['req_per_min']
-            )
+            req_rate = np.random.randint(*ENHANCED_RANGES['normal']['req_per_min'])
             ua_variance = np.random.randint(
-                ENHANCED_RANGES['normal']['ua_per_ip']
-            )
+                *ENHANCED_RANGES['normal']['ua_per_ip'],
+                size=1
+            )[0]
+            
         
         # Generate enhanced features
         record = {

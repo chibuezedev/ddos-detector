@@ -32,79 +32,130 @@ class EnhancedDDoSDetector:
         self.model_type = model_type
         self.optimal_threshold = optimal_threshold
 
+    
     def preprocess_data(self, df):
-        """Enhanced preprocessing with type validation"""
-        # Convert numerical fields
-        num_cols = ['content_length', 'num_headers', 'headers_length',
-                   'request_duration', 'req_rate_1min', 'ua_variance',
-                   'hour_of_day', 'day_of_week', 'source_ip']
+        """Enhanced preprocessing with more realistic noise and feature masking"""
+        # Remove direct indicators and potential leakage
+        leak_columns = [
+            'attack_type', 'entropy_rate', 'packet_size_var', 
+            'is_proxy',
+            'ua_variance' 
+        ]
+        df = df.drop(columns=[col for col in leak_columns if col in df.columns])
+        
+        # Convert numerical fields with significant noise
+        num_cols = [
+            'content_length', 'num_headers', 'headers_length',
+            'request_duration', 'req_rate_1min',
+            'hour_of_day', 'day_of_week'
+        ]
         
         for col in num_cols:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(float)
+            if col not in ['hour_of_day', 'day_of_week']:
+                noise_factor = 0.05  # 5% noise
+                df[col] += np.random.normal(0, df[col].std() * noise_factor, size=len(df))
+                
+                # Add occasional outliers
+                outlier_mask = np.random.random(len(df)) < 0.01  # 1% outliers
+                df.loc[outlier_mask, col] *= np.random.uniform(1.5, 3, size=outlier_mask.sum())
         
-        # Convert IP addresses
+        # Randomly mask some values
+        for col in num_cols:
+            mask = np.random.random(len(df)) < 0.02  # 2% missing values
+            df.loc[mask, col] = 0
+        
+        # Handle IP addresses with more randomization
         df['source_ip'] = df['source_ip'].apply(
             lambda x: int(ipaddress.ip_address(x)) if isinstance(x, str) else 0
         )
+        df['source_ip'] += np.random.normal(0, df['source_ip'].std() * 0.1, size=len(df))
         
-        # Handle categorical features
+        # Randomly shuffle some categorical values
         categorical = ['http_method', 'tls_version', 'geo_location', 'device_type']
         df[categorical] = df[categorical].astype('category')
         
-        # Create preprocessor
-        numerical = ['source_ip', 'content_length', 'num_headers', 
-                    'headers_length', 'request_duration', 'req_rate_1min', 
-                    'ua_variance', 'hour_of_day', 'day_of_week']
+        for cat_col in categorical:
+            # Randomly change 5% of values
+            mask = np.random.random(len(df)) < 0.05
+            if mask.any():
+                df.loc[mask, cat_col] = np.random.choice(
+                    df[cat_col].unique(), 
+                    size=mask.sum()
+                )
+        
+        # Create preprocessor with more robust handling
+        numerical = [
+            'source_ip', 'content_length', 'num_headers', 
+            'headers_length', 'request_duration', 'req_rate_1min',
+            'hour_of_day', 'day_of_week'
+        ]
         
         self.preprocessor = ColumnTransformer([
             ('num', StandardScaler(), numerical),
-            ('cat', OneHotEncoder(max_categories=20, handle_unknown='infrequent_if_exist'), categorical)
-        ], sparse_threshold=0.8)
+            ('cat', OneHotEncoder(
+                max_categories=8,
+                handle_unknown='ignore',
+                sparse_output=False
+            ), categorical)
+        ], remainder='drop')
         
-        return self.preprocessor.fit_transform(df), df
-    
+        X = self.preprocessor.fit_transform(df)
+        X += np.random.normal(0, 0.01, size=X.shape)  # Add 1% global noise
+        
+        return X, df
+
     def train(self, data_path):
-        """Optimized training"""
-        # Load data with type specification
-        dtypes = {
-            'user_agent': 'category',
-            'url_path': 'category',
-            'tls_version': 'category',
-            'geo_location': 'category',
-            'device_type': 'category'
-        }
-        df = pd.read_csv(data_path, dtype=dtypes)
+        """Enhanced training pipeline with cross-validation"""
+        # Load and preprocess data
+        X, df = self.preprocess_data(pd.read_csv(data_path))
+        y = df['label'].values
         
-        # Split data before preprocessing
-        train_df, test_df = train_test_split(
-            df, test_size=0.2, random_state=42, stratify=df['label']
+        # Split dataset with proper stratification
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42, stratify=y
         )
         
-        # Process in chunks
-        chunk_size = 100000
-        X_train = []
+        if self.model_type == 'xgb':
+            self.model = XGBClassifier(
+                n_estimators=200,
+                max_depth=5,
+                learning_rate=0.05,
+                subsample=0.8,
+                colsample_bytree=0.8,
+                scale_pos_weight=1,
+                eval_metric='logloss',
+                use_label_encoder=False,
+                random_state=42,
+                enable_categorical=True,
+                reg_lambda=1,
+                reg_alpha=0.1
+            )
+        else:
+            self.model = BalancedRandomForestClassifier(
+                n_estimators=150,
+                max_depth=15,
+                min_samples_split=10,
+                min_samples_leaf=4,
+                max_features='sqrt',
+                sampling_strategy='auto',
+                n_jobs=-1,
+                random_state=42
+            )
         
-        for i in range(0, len(train_df), chunk_size):
-            chunk = train_df.iloc[i:i+chunk_size]
-            X_chunk = self.preprocessor.transform(chunk)
-            X_train.append(X_chunk)
-            
-        X_train = np.vstack(X_train)
-        y_train = train_df['label']
-        
-        # Train with incremental learning
-        self.model = XGBClassifier(
-            tree_method='hist',
-            grow_policy='lossguide',
-            max_bin=256,
-            n_estimators=1000,
-            learning_rate=0.05,
-            eval_metric='logloss',
-            early_stopping_rounds=20
-        )
-        
+        eval_set = [(X_test, y_test)]
         self.model.fit(X_train, y_train,
-                      eval_set=[(self.preprocessor.transform(test_df), test_df['label'])])
+                      eval_set=eval_set,
+                      early_stopping_rounds=10,
+                      verbose=False)
+        
+        # optimal threshold
+        y_proba = self.model.predict_proba(X_train)[:, 1]
+        self.find_optimal_threshold(y_train, y_proba)
+        
+        # Evaluate performance
+        self.evaluate_model(X_test, y_test)
+        self.plot_feature_importance()
 
     def plot_feature_importance(self):
         """Enhanced feature importance visualization"""
@@ -197,53 +248,53 @@ class EnhancedDDoSDetector:
         plt.show()
 
     def train(self, data_path):
-        """Enhanced training pipeline"""
-        # Load and preprocess data
-        X, df = self.preprocess_data(pd.read_csv(data_path))
-        y = df['label'].values
-        
-        # Split dataset
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42, stratify=y
-        )
-        
-        # Model selection
-        if self.model_type == 'xgb':
-            base_model = XGBClassifier(
-                n_estimators=300,
-                max_depth=7,
-                learning_rate=0.1,
-                subsample=0.8,
-                colsample_bytree=0.8,
-                scale_pos_weight=np.sqrt(np.sum(y == 0)/np.sum(y == 1)),
-                eval_metric='logloss',
-                use_label_encoder=False,
-                random_state=42
-            )
-            self.model = CalibratedClassifierCV(base_model, method='isotonic', cv=3)
-        else:
-            self.model = BalancedRandomForestClassifier(
-                n_estimators=200,
-                max_depth=25,
-                min_samples_split=8,
-                min_samples_leaf=2,
-                max_features='sqrt',
-                sampling_strategy='auto',
-                n_jobs=-1,
-                random_state=42
-            )
-        
-        # Train model
-        self.model.fit(X_train, y_train)
-        
-        # Find optimal threshold
-        y_proba = self.model.predict_proba(X_train)[:, 1]
-        self.find_optimal_threshold(y_train, y_proba)
-        
-        # Evaluate performance
-        self.evaluate_model(X_test, y_test)
-        self.plot_feature_importance()
-        self.plot_attack_types(df[df['label'] == 1])
+     """Enhanced training pipeline"""
+     # Load and preprocess data
+     X, df = self.preprocess_data(pd.read_csv(data_path))
+     y = df['label'].values
+    
+     # Split dataset
+     X_train, X_test, y_train, y_test = train_test_split(
+         X, y, test_size=0.2, random_state=42, stratify=y
+     )
+    
+    # Model selection
+     if self.model_type == 'xgb':
+         self.model = XGBClassifier(
+             n_estimators=300,
+             max_depth=7,
+             learning_rate=0.1,
+             subsample=0.8,
+             colsample_bytree=0.8,
+             scale_pos_weight=np.sqrt(np.sum(y == 0)/np.sum(y == 1)),
+             eval_metric='logloss',
+             use_label_encoder=False,
+             random_state=42,
+             enable_categorical=True
+         )
+     else:
+         self.model = BalancedRandomForestClassifier(
+             n_estimators=200,
+             max_depth=25,
+             min_samples_split=8,
+             min_samples_leaf=2,
+             max_features='sqrt',
+             sampling_strategy='auto',
+             n_jobs=-1,
+             random_state=42
+         )
+    
+     # Train model
+     self.model.fit(X_train, y_train)
+    
+     # Find optimal threshold
+     y_proba = self.model.predict_proba(X_train)[:, 1]
+     self.find_optimal_threshold(y_train, y_proba)
+    
+     # Evaluate performance
+     self.evaluate_model(X_test, y_test)
+     self.plot_feature_importance()
+    #  self.plot_attack_types(df[df['label'] == 1])
 
     def predict_request(self, request_data):
         """Enhanced real-time prediction"""
@@ -282,7 +333,7 @@ class EnhancedDDoSDetector:
         if proba > 0.4: return 'Medium'
         return 'Low'
 
-    def save_model(self, path='ddos_detector.pkl'):
+    def save_model(self, path='ddos_detector_brf.pkl'):
         """Save complete model package"""
         joblib.dump({
             'model': self.model,
@@ -300,17 +351,18 @@ class EnhancedDDoSDetector:
         self.optimal_threshold = components.get('threshold', 0.5)
 
 if __name__ == "__main__":
-    # Initialize and train detector
-    detector = EnhancedDDoSDetector(model_type='xgb')
+    detector = EnhancedDDoSDetector(model_type='brf')  # xgb or brf
     detector.train('enhanced_ddos_dataset.csv')
     detector.save_model()
+    # detector.load_model()
     
-    # Example prediction
     sample_request = {
         'source_ip': '192.168.1.100',
+        'day_of_week': 26,
+        'hour_of_day': 14,
         'http_method': 'GET',
         'url_path': '/api/v1/login',
-        'user_agent': 'XATTACK-a1b2c3d4',
+        'user_agent': 'Mozilla/5.0 (compatible; MSIE 6.0; Windows NT 5.1; SV1; .NET CLR 1.1.4322)',
         'content_length': 0,
         'http_version': 'HTTP/1.0',
         'num_headers': 5,
@@ -318,7 +370,7 @@ if __name__ == "__main__":
         'is_proxy': 1,
         'cookie_present': 0,
         'request_duration': 0.05,
-        'req_rate_1min': 1500,
+        'req_rate_1min': 5,
         'ua_variance': 8,
         'tls_version': None,
         'geo_location': 'ASIA',
