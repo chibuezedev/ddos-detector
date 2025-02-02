@@ -119,11 +119,11 @@ class DDoSProtectionMiddleware {
           features
         );
         const { is_ddos, confidence, risk_level } = response.data;
-
         await Prediction.create({
           ip: req.ip,
           features,
           is_ddos,
+          prediction: is_ddos ? "ddos" : "normal",
           confidence,
           risk_level,
           timestamp: new Date(),
@@ -137,7 +137,6 @@ class DDoSProtectionMiddleware {
             risk_level,
           });
         }
-        console.log("Received", is_ddos, confidence, risk_level);
         req.ddosInfo = { is_ddos, confidence, risk_level };
         next();
       } catch (error) {

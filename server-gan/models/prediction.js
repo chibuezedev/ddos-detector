@@ -18,9 +18,6 @@ const predictionSchema = new mongoose.Schema({
   confidence: {
     type: Number,
   },
-  rawProbabilities: {
-    type: mongoose.Schema.Types.Mixed,
-  },
   is_ddos: {
     type: Boolean,
   },
