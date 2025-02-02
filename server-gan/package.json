@@ -12,6 +12,7 @@
     "geoip-lite": "^1.4.10",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.9.5",
+    "nodemailer": "^6.10.0",
     "nodemon": "^3.1.9",
     "onnxruntime-common": "^1.20.1",
     "onnxruntime-node": "^1.20.1",

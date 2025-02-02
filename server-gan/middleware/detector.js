@@ -2,6 +2,7 @@ const axios = require("axios");
 const uaParser = require("ua-parser-js");
 const geoip = require("geoip-lite");
 const Prediction = require("../models/prediction");
+const sendEmail = require("../utils/sendEmail");
 
 class DDoSProtectionMiddleware {
 
@@ -130,6 +131,9 @@ class DDoSProtectionMiddleware {
         });
 
         if (is_ddos && confidence >= this.options.blockThreshold) {
+          await sendEmail("chibuezedeveloper@gmail.com", "DDOS ATTACK DETECTED!!", 
+            `Potential DDoS attack detected from IP: ${ip} with confidence: ${confidence}`
+          )
           return res.status(429).json({
             error: "Request blocked",
             message: "Potential DDoS activity detected",

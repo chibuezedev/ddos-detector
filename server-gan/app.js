@@ -23,7 +23,6 @@ app.use(express.urlencoded({ extended: true }));
 // DDoS protection middleware
 app.use(ddosProtection.middleware());
 
-
 app.get("/", (req, res) => {
   res.json({ 
     message: 'Access granted',
