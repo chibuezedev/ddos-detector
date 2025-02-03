@@ -132,7 +132,9 @@ class DDoSProtectionMiddleware {
 
         if (is_ddos && confidence >= this.options.blockThreshold) {
           await sendEmail("chibuezedeveloper@gmail.com", "DDOS ATTACK DETECTED!!", 
-            `Potential DDoS attack detected from IP: ${ip} with confidence: ${confidence}`
+            `Potential DDoS attack detected from IP: ${ip} with confidence: ${confidence}. 
+            Risk level: ${risk_level}. Please investigate. \n\nFeatures: ${JSON.stringify(features)}
+            `
           )
           return res.status(429).json({
             error: "Request blocked",
