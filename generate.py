@@ -9,7 +9,6 @@ fake = Faker()
 random.seed(42)
 np.random.seed(42)
 
-# Configuration
 DATASET_SIZE = 1000000  # 1M samples
 BALANCE_RATIO = 0.5
 NORMAL_IP_POOL_SIZE = 20000
@@ -17,7 +16,7 @@ ATTACK_IP_POOL_SIZE = 1000
 TIMEWINDOW_MINUTES = 1
 
 # feature ranges
-ENHANCED_RANGES = {
+RANGES = {
     'normal': {
         'req_per_min': (1, 30),
         'content_length': (0, 2000),
@@ -94,25 +93,20 @@ def generate_temporal_features(base_time, is_attack):
 
 def inject_noise(features, is_attack):
     """Add realistic network noise"""
-    # Measurement errors
     if random.random() < 0.05:
         features['content_length'] *= np.random.uniform(0.9, 1.1)
     
-    # Missing data
     if random.random() < 0.03:
         features['user_agent'] = None
     
-    # Transient issues
     if not is_attack and random.random() < 0.01:
         features['request_duration'] *= np.random.uniform(2, 10)
     
-    # Benign outliers
     if not is_attack and random.random() < 0.005:
         features['req_rate_1min'] *= np.random.uniform(5, 20)
     
     return features
 
-# Generate enhanced dataset
 with open('enhanced_ddos_dataset.csv', 'w', newline='') as csvfile:
     fieldnames = [
     'timestamp', 'hour_of_day', 'day_of_week', 'source_ip', 'http_method', 'url_path', 'user_agent',
@@ -125,11 +119,11 @@ with open('enhanced_ddos_dataset.csv', 'w', newline='') as csvfile:
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
     writer.writeheader()
     
-    # Generate IP pools
+    # generate IP pools
     attack_ips = generate_attack_ip_pool(ATTACK_IP_POOL_SIZE)
     normal_ips = [fake.ipv4() for _ in range(NORMAL_IP_POOL_SIZE)]
     
-    # Track behavioral patterns
+    # track behavioral patterns
     ip_behavior = {}
     
     for i in range(DATASET_SIZE):
@@ -138,38 +132,35 @@ with open('enhanced_ddos_dataset.csv', 'w', newline='') as csvfile:
         
         is_attack = i >= DATASET_SIZE * BALANCE_RATIO
         record_type = 'attack' if is_attack else 'normal'
-        attack_type = random.choice(ENHANCED_RANGES['attack']['types']) if is_attack else None
+        attack_type = random.choice(RANGES['attack']['types']) if is_attack else None
         
-        # Generate base features with temporal patterns
         timestamp = generate_temporal_features(
             datetime.now() - timedelta(days=30),
             is_attack
         )
         
-        # IP behavior simulation
         if is_attack:
             source_ip = random.choice(attack_ips)
             req_rate = np.random.randint(
-                *ENHANCED_RANGES['attack'][attack_type]['req_per_min']
+                *RANGES['attack'][attack_type]['req_per_min']
             )
             ua_variance = np.random.randint(
-                *ENHANCED_RANGES['attack']['ua_per_ip'],
+                *RANGES['attack']['ua_per_ip'],
                 size=1
             )[0]
         else:
             source_ip = random.choice(normal_ips)
-            req_rate = np.random.randint(*ENHANCED_RANGES['normal']['req_per_min'])
+            req_rate = np.random.randint(*RANGES['normal']['req_per_min'])
             ua_variance = np.random.randint(
-                *ENHANCED_RANGES['normal']['ua_per_ip'],
+                *RANGES['normal']['ua_per_ip'],
                 size=1
             )[0]
             
         
-        # Generate enhanced features
         record = {
             'timestamp': timestamp.isoformat(),
-            'hour_of_day': timestamp.hour,  # Add this
-            'day_of_week': timestamp.weekday(),  # Add this
+            'hour_of_day': timestamp.hour, 
+            'day_of_week': timestamp.weekday(),
             'source_ip': source_ip,
             'http_method': random.choices(
                 ['GET', 'POST', 'PUT', 'DELETE', 'HEAD'],
@@ -183,7 +174,7 @@ with open('enhanced_ddos_dataset.csv', 'w', newline='') as csvfile:
             )[0],
             'user_agent': generate_ua(is_attack),
             'content_length': int(np.random.randint(
-             *ENHANCED_RANGES[record_type]['content_length']
+             *RANGES[record_type]['content_length']
              )),
             'http_version': random.choices(
                 ['HTTP/1.0', 'HTTP/1.1', 'HTTP/2'],
@@ -191,33 +182,33 @@ with open('enhanced_ddos_dataset.csv', 'w', newline='') as csvfile:
                 k=1
             )[0],
             'num_headers': int(np.random.randint(
-        *ENHANCED_RANGES[record_type]['num_headers']
+        *RANGES[record_type]['num_headers']
     )),
             'headers_length': int(np.random.randint(100, 2000)),
             'is_proxy': 1 if random.random() > 0.95 and is_attack else 0,
             'cookie_present': 0 if is_attack else int(random.random() > 0.3),
             'request_duration': float(np.random.uniform(
-        *ENHANCED_RANGES['attack'][attack_type]['duration'] if is_attack 
-        else ENHANCED_RANGES['normal']['duration']
+        *RANGES['attack'][attack_type]['duration'] if is_attack 
+        else RANGES['normal']['duration']
     )),
             'req_rate_1min': int(req_rate),
             'ua_variance': int(ua_variance),
             'tls_version': random.choices(
-                ENHANCED_RANGES[record_type]['tls_versions'],
+                RANGES[record_type]['tls_versions'],
                 weights=[0.7, 0.2, 0.1] if record_type == 'normal' else [0.1, 0.3, 0.6],
                 k=1
             )[0],
             'geo_location': random.choices(
-                list(ENHANCED_RANGES[record_type]['geo_weights'].keys()),
-                weights=ENHANCED_RANGES[record_type]['geo_weights'].values(),
+                list(RANGES[record_type]['geo_weights'].keys()),
+                weights=RANGES[record_type]['geo_weights'].values(),
                 k=1
             )[0],
             'device_type': random.choices(
-                ENHANCED_RANGES[record_type]['device_weights'],
+                RANGES[record_type]['device_weights'],
                 k=1
             )[0],
             'entropy_rate': float(np.random.uniform(
-        *ENHANCED_RANGES[record_type]['entropy']
+        *RANGES[record_type]['entropy']
     )),
             'packet_size_var': float(np.random.exponential(0.5)),
             'attack_type': attack_type,

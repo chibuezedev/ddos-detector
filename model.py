@@ -35,7 +35,6 @@ class DDoSDetector:
     
     def preprocess_data(self, df):
         """Enhanced preprocessing with more realistic noise and feature masking"""
-        # Remove direct indicators and potential leakage
         leak_columns = [
             'attack_type', 'entropy_rate', 'packet_size_var', 
             'is_proxy',
@@ -43,7 +42,6 @@ class DDoSDetector:
         ]
         df = df.drop(columns=[col for col in leak_columns if col in df.columns])
         
-        # Convert numerical fields with significant noise
         num_cols = [
             'content_length', 'num_headers', 'headers_length',
             'request_duration', 'req_rate_1min',
@@ -56,27 +54,22 @@ class DDoSDetector:
                 noise_factor = 0.05  # 5% noise
                 df[col] += np.random.normal(0, df[col].std() * noise_factor, size=len(df))
                 
-                # Add occasional outliers
-                outlier_mask = np.random.random(len(df)) < 0.01  # 1% outliers
+                outlier_mask = np.random.random(len(df)) < 0.01
                 df.loc[outlier_mask, col] *= np.random.uniform(1.5, 3, size=outlier_mask.sum())
         
-        # Randomly mask some values
         for col in num_cols:
-            mask = np.random.random(len(df)) < 0.02  # 2% missing values
+            mask = np.random.random(len(df)) < 0.02
             df.loc[mask, col] = 0
         
-        # Handle IP addresses with more randomization
         df['source_ip'] = df['source_ip'].apply(
             lambda x: int(ipaddress.ip_address(x)) if isinstance(x, str) else 0
         )
         df['source_ip'] += np.random.normal(0, df['source_ip'].std() * 0.1, size=len(df))
         
-        # Randomly shuffle some categorical values
         categorical = ['http_method', 'tls_version', 'geo_location', 'device_type']
         df[categorical] = df[categorical].astype('category')
         
         for cat_col in categorical:
-            # Randomly change 5% of values
             mask = np.random.random(len(df)) < 0.05
             if mask.any():
                 df.loc[mask, cat_col] = np.random.choice(
@@ -84,7 +77,6 @@ class DDoSDetector:
                     size=mask.sum()
                 )
         
-        # Create preprocessor with more robust handling
         numerical = [
             'source_ip', 'content_length', 'num_headers', 
             'headers_length', 'request_duration', 'req_rate_1min',
@@ -101,17 +93,15 @@ class DDoSDetector:
         ], remainder='drop')
         
         X = self.preprocessor.fit_transform(df)
-        X += np.random.normal(0, 0.01, size=X.shape)  # Add 1% global noise
+        X += np.random.normal(0, 0.01, size=X.shape)
         
         return X, df
 
     def train(self, data_path):
         """Enhanced training pipeline with cross-validation"""
-        # Load and preprocess data
         X, df = self.preprocess_data(pd.read_csv(data_path))
         y = df['label'].values
         
-        # Split dataset with proper stratification
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.2, random_state=42, stratify=y
         )
@@ -153,7 +143,7 @@ class DDoSDetector:
         y_proba = self.model.predict_proba(X_train)[:, 1]
         self.find_optimal_threshold(y_train, y_proba)
         
-        # Evaluate performance
+        # evaluate performance
         self.evaluate_model(X_test, y_test)
         self.plot_feature_importance()
 
@@ -249,7 +239,6 @@ class DDoSDetector:
 
     def train(self, data_path):
      """Enhanced training pipeline"""
-     # Load and preprocess data
      X, df = self.preprocess_data(pd.read_csv(data_path))
      y = df['label'].values
     
@@ -284,14 +273,13 @@ class DDoSDetector:
              random_state=42
          )
     
-     # Train model
      self.model.fit(X_train, y_train)
     
-     # Find optimal threshold
+     # optimal threshold
      y_proba = self.model.predict_proba(X_train)[:, 1]
      self.find_optimal_threshold(y_train, y_proba)
     
-     # Evaluate performance
+     # evaluate performance
      self.evaluate_model(X_test, y_test)
      self.plot_feature_importance()
     #  self.plot_attack_types(df[df['label'] == 1])
